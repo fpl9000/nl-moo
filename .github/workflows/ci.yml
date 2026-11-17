@@ -1,0 +1,106 @@
+# Continuous integration for nl-moo.
+#
+# Every push to main and every pull request runs the same checks on a Linux
+# runner and a Windows runner, as nl-moo-implementation-plan.md section 2
+# describes: go vet, staticcheck, govulncheck, a build of the nl-moo binary,
+# and the full test suite. The only difference between the two runners is
+# that Linux runs the tests under Go's race detector (-race); on Windows the
+# race detector needs a C toolchain (cgo), which the rest of the build avoids.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only access to the repository is all these jobs need.
+permissions:
+  contents: read
+
+# If a newer commit is pushed to the same branch or PR while a run is still
+# going, cancel the older run instead of letting both finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # A matrix runs this one job definition once per listed OS, in parallel.
+    strategy:
+      fail-fast: false # let both OS jobs finish, so one failure doesn't hide the other
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    name: test (${{ matrix.os }})
+
+    # Use bash on both runners so every step below is written once. The
+    # Windows runner provides bash through Git for Windows.
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      # Pinned versions of the two analysis tools, so a new release of either
+      # can't break CI unannounced. Bump these deliberately in a PR.
+      STATICCHECK_VERSION: v0.8.2 # honnef.co/go/tools
+      GOVULNCHECK_VERSION: v1.9.0 # golang.org/x/vuln
+      # The server is pure Go; building without cgo proves it needs no C
+      # compiler on either OS. The -race step turns cgo back on for itself.
+      CGO_ENABLED: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install the Go version named by the "go" line in go.mod. A line such
+      # as "go 1.27" resolves to the newest 1.27.x patch release, so security
+      # fixes in the standard library arrive without editing anything here.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Show Go version
+        run: go version
+
+      - name: Install analysis tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@"$STATICCHECK_VERSION"
+          go install golang.org/x/vuln/cmd/govulncheck@"$GOVULNCHECK_VERSION"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: staticcheck
+        run: staticcheck ./...
+
+      # govulncheck reports known vulnerabilities only in code paths the
+      # program can actually reach, in dependencies and the standard library.
+      - name: govulncheck
+        run: govulncheck ./...
+
+      - name: Build nl-moo
+        run: |
+          # "go env GOEXE" is ".exe" on Windows and empty elsewhere.
+          exe="bin/nl-moo$(go env GOEXE)"
+          go build -o "$exe" ./cmd/nl-moo
+          ls -l bin/
+          "./$exe" -version
+
+      - name: Test with the race detector (Linux)
+        if: runner.os == 'Linux'
+        env:
+          CGO_ENABLED: "1" # the race detector is implemented with cgo
+        run: go test -race ./...
+
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: go test ./...
+
+      # The Linux job also cross-compiles for Windows and the Windows job for
+      # Linux, which catches a platform-specific build break even before the
+      # other runner reports.
+      - name: Cross-compile for the other OS
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then other=windows; else other=linux; fi
+          GOOS=$other GOARCH=amd64 go build -o "$RUNNER_TEMP/nl-moo-$other" ./cmd/nl-moo
+          echo "cross-compiled for $other/amd64"
