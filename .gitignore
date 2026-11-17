@@ -31,3 +31,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# The nl-moo binary that "go build ./cmd/nl-moo" leaves in the repository root on Linux.
+/nl-moo
+
+# Binaries built by CI or by "go build -o bin/ ./cmd/nl-moo".
+/bin/
