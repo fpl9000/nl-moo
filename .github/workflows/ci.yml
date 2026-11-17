@@ -50,14 +50,20 @@ jobs:
       CGO_ENABLED: "0"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Install the Go version named by the "go" line in go.mod. A line such
       # as "go 1.27" resolves to the newest 1.27.x patch release, so security
       # fixes in the standard library arrive without editing anything here.
-      - uses: actions/setup-go@v5
+      #
+      # setup-go caches downloaded modules keyed on go.sum by default. There
+      # is no go.sum until the first third-party dependency arrives (M2 or
+      # M3), so key the cache on go.mod for now to avoid a warning; switch
+      # this back to go.sum when it exists.
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
 
       - name: Show Go version
         run: go version
