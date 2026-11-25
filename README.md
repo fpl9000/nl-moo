@@ -6,7 +6,7 @@ NL-MOO is a LambdaMOO-inspired virtual world. Players connect over telnet, walk 
 
 ## Status
 
-This repository is at milestone **M0**: a skeleton with a buildable `nl-moo` binary that parses its flags and prints its version, plus continuous integration on Linux and Windows. There is no server yet. The milestones that build it are listed in the plan below.
+This repository is at milestone **M1**: the in-memory object model in `internal/world` (objects, properties, methods as data, inheritance lookup, the permission rules and the engine invariants), with a buildable `nl-moo` binary that so far only prints its version, plus continuous integration on Linux and Windows. There is no server yet. The milestones that build it are listed in the plan below.
 
 ## Documents
 
